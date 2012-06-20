@@ -75,7 +75,8 @@ struct phoenix_binary {
 
   template<class... Args>
   inline auto operator()(Args&&... args) const
-      -> decltype(std::declval<Function>()(std::declval<Left>()(std::forward<Args>(args)...), std::declval<Right>()(std::forward<Args>(args)...))) {
+      // -> decltype(std::declval<Function>()(std::declval<Left>()(std::forward<Args>(args)...), std::declval<Right>()(std::forward<Args>(args)...))) {
+      -> typename lambda_return_type<Function, Left, Right>::template type<Args...> {
     return fn(left(std::forward<Args>(args)...), right(std::forward<Args>(args)...));
     // return fn(eval(left, std::forward<Args>(args)...), eval(right, std::forward<Args>(args)...));
   }

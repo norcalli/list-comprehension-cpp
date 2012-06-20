@@ -41,12 +41,13 @@ struct Get {
 template<class Function, class... Args>
 auto eval(Function fn, Args&&... args) -> decltype(fn(args...)) {
 // auto eval(lambda::Lambda<Function>& fn, Args&&... args) -> decltype(fn(args...)) {
-  return fn(args...);
+  // return fn(args...);
+  return fn(std::forward<Args>(args)...);
 }
 
 template<class T, class... Args, class = typename std::enable_if<!lambda::is_lambda<T>::value>::type>
 // auto eval(const T& t, Args&&... args) -> decltype(t) {
-auto eval(T&& t, Args&&... args) -> decltype(t) {
+auto eval(T&& t, Args&&...) -> decltype(std::forward<T>(t)) {
   return std::forward<T>(t);
 }
 
@@ -56,15 +57,15 @@ auto eval(T&& t, Args&&... args) -> decltype(t) {
 // }
 
 template<size_t n, class... Args>
-typename std::tuple_element<n, std::tuple<Args...> >::type
+typename std::tuple_element<n, std::tuple<Args...> >::type&&
 eval(const lambda::placeholder<n>&, Args&&... args) {
-  return std::get<n>(args...);
+  return std::get<n>(std::forward<Args>(args)...);
 }
 
 template<size_t n, class... Args>
-typename std::tuple_element<n, std::tuple<Args...> >::type
+typename std::tuple_element<n, std::tuple<Args...> >::type&&
 eval(const lambda::Lambda<Get<n> >&, Args&&... args) {
-  return std::get<n>(args...);
+  return std::get<n>(std::forward<Args>(args)...);
 }
 
 }
