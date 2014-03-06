@@ -47,23 +47,23 @@ struct get_helper<0> {
 }
 
 // TODO: Why do I have this structure for get? couldn't I just have the one?
-template<size_t n, class... Args>
-inline variadic_element<n, Args...>&& get(Args&&... args) {
-  return std::details::get_helper<n>()(std::forward<Args>(args)...);
+// template<size_t n, class... Args>
+// inline variadic_element<n, Args...>&& get(Args&&... args) {
+//   return std::details::get_helper<n>()(std::forward<Args>(args)...);
+// }
+
+template<size_t n, class T, class U, class... Args>
+// inline typename std::tuple_element<n, std::tuple<T, U, Args...>>::type&&
+inline variadic_element<n, T, U, Args...>&&
+    get(T&& t, U&& u, Args&&... args) {
+  return std::details::get_helper<n>()(std::forward<T>(t), std::forward<U>(u), std::forward<Args>(args)...);
 }
 
-// template<size_t n, class T, class U, class... Args>
-// // inline typename std::tuple_element<n, std::tuple<T, U, Args...>>::type&&
-// inline variadic_element<n, T, U, Args...>&&
-//     get(T&& t, U&& u, Args&&... args) {
-//   return std::details::get_helper<n>()(std::forward<T>(t), std::forward<U>(u), std::forward<Args>(args)...);
-// }
-
-// template<size_t n, class T>
-// T&& get(T&& t) {
-//   static_assert(n == 0, "Don't be stupid.");
-//   return std::forward<T>(t);
-// }
+template<size_t n, class T>
+T&& get(T&& t) {
+  static_assert(n == 0, "Don't be stupid.");
+  return std::forward<T>(t);
+}
 
 }
 

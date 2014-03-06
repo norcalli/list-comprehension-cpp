@@ -1,14 +1,15 @@
 #include <iostream>
 #include <functional>
 #include <tuple>
+#include "lambda.h"
 #include "print-utils.h"
 #include "variadic-utils.h"
-#include "lambda.h"
 #include "syntactic-sugar.h"
 
 #include <cmath>
 
-#define DOUT(x) std::cout << #x " = " << (x) << std::endl;
+// #define DOUT(x) std::cout << #x " = " << (x) << std::endl;
+#define DOUT(x) std::cout << #x " = " << (x) << '\n';
 
 using namespace lambda;
 
@@ -24,9 +25,6 @@ struct Times2 {
     return t*2;
   }
 };
-
-template<bool C, class U = void>
-using enable_if = typename std::enable_if<C, U>::type;
 
 //////////
 
@@ -183,16 +181,16 @@ struct lambda_storage<t_arg, t_arg2, Params...> {
 //   return fn(args...);
 // }
 
-std::string join(const std::string& j, std::initializer_list<std::string> array) {
-  std::string result;
-  auto it = std::begin(array), end = std::end(array);
-  result += *it;
-  while (++it != end) {
-    result += j;
-    result += *it;
-  }
-  return result;
-}
+// std::string join(const std::string& j, std::initializer_list<std::string> array) {
+//   std::string result;
+//   auto it = std::begin(array), end = std::end(array);
+//   result += *it;
+//   while (++it != end) {
+//     result += j;
+//     result += *it;
+//   }
+//   return result;
+// }
 
 struct Evaluator {
   template<class Function, class... Args>
@@ -201,7 +199,7 @@ struct Evaluator {
   }
   template<class... Strings>
   std::string str(Strings... strings) const {
-    return std::string("Evaluator(") + join(", ", {strings...}) + ")";
+    return std::string("lambda::bind(") + join(", ", {strings...}) + ")";
   }
 };
 
@@ -237,7 +235,123 @@ void ido(T&& t) {
   t = 123;
 }
 
+
+template<class... Args>
+bool lambdas_test(Args&&...) {
+  return any_lambdas<Args...>::value;
+}
+
+// TODO: Rename MACROS as NARY_WRAPPER when they include the functor definition.
+// TODO: Adapters and wrappers, wrapper + adapter = nary_lambda
+
+// TODO: Epsilon signalling tag that is just the identity function, turns whatever it interacts with into a lambda
+
+#include <cstdlib>
+
+std::string adjectives[] = {"stupid", "great", "lame"};
+
+// TODO: rename Evaluate to lambda::bind
+// TODO: add operator[] support
+// TODO: Update all macros and functions to accept rvalues and std::forward them.
+#include <random>
+
+namespace std {
+
+template<class T>
+auto size(T&& t) -> decltype(t.size()) {
+  return t.size();
+}
+
+// template<class T, size_t n>
+// size_t size(T array[n]) {
+//   return n;
+// }
+
+template<class T, size_t n>
+constexpr size_t size(T&&) {
+  return 1;
+}
+
+template<class T>
+constexpr auto size(T&& array) -> decltype(sizeof(array)/sizeof(array[0])) {
+  return sizeof(array)/sizeof(array[0]);
+}
+
+}
+
+// TODO: Generator is iterator that calls generator function.
+// TODO: Implement yield ideal.
+// TODO: List comprehension syntax.
+// TODO: bool conversion operator?
+// TODO: Template conversion operator for lambdas?
+
+#include "stats.h"
+
+// Possible syntaxes:
+// list = [x*x for x in list if x < 3]
+// To only apply list comprehension when it is used, can add implicit conversion
+// operator which only converts to iterables.
+// Apply filter and map to pair of iterators or iterable object.
+// list = list | map(_1*_1) | if(_1 < 3)
+// list = map(_1*_1) | list | if(_1 < 3)
+// map(_1*_1) | if(_1 < 3) | in({0, 1, 2, 3, 4, 5})
+
+struct MapFilter {
+  
+};
+
+#include "extended-type-traits.h"
+
+template<class Function, class... Args>
+bool CallableTest(Function, Args...) {
+  return is_callable<Function, Args...>::value;
+}
+
 int main(int argc, char *argv[]) {
+  const auto pi = atan(1)*4;
+
+  std::random_device rd;
+  std::default_random_engine re(rd());
+  std::uniform_int_distribution<> dist{0, std::size(adjectives) - 1};
+
+  auto rando = [&](){ return dist(re); };
+  auto moo = std::bind(rando);
+  auto boo = lambda::bind(rando);
+  DOUT(CallableTest(rando, 4));
+  DOUT(CallableTest(rando));
+  DOUT(CallableTest(moo, 4));
+  DOUT(CallableTest(boo));
+  DOUT(is_callable<decltype(boo)>::value);
+  DOUT(CallableTest(4, 5));
+  DOUT(CallableTest(std::sin(_1), 5));
+  DOUT(CallableTest(lambda::bind(functors::Sin(), pi/6), 5));
+  DOUT(CallableTest(_1, 5));
+  DOUT(CallableTest(_1*2, 5));
+  DOUT(CallableTest(lambda::ref(std::cout), 5));
+  DOUT(lambda::bind(functors::Sin(), pi/6)());
+  DOUT(moo());
+  DOUT(boo());                          // TODO: Figure out why you can't pass no arguments (to nary). Guess: eval is being called with a single argument, and just being returned (correct).
+  DOUT(boo(4));
+  srand(time(0));
+  std::cout << std::boolalpha;
+  // auto greet = lambda::ref(std::cout) << "Hello: " << _1 << ", nice to meet you. " << _1 << " is a " << lambda::ref(adjectives)[lambda::bind(rand) % 3] << " name.\n";
+  auto greet = lambda::ref(std::cout) << "Hello: " << _1 << ", nice to meet you. " << _1 << " is a " << lambda::ref(adjectives)[lambda::bind(rando)] << " name\n";
+  // auto greet = lambda::ref(std::cout) << "Hello: " << _1 << ", nice to meet you. " << _1 << " is a " << adjectives[rand() % 3] << " name\n";
+  
+  int ref_test = 9;
+  DOUT(&ref_test);
+  DOUT(&lambda::ref(ref_test)());
+  DOUT(&ref_test == (&lambda::ref(ref_test))());
+  DOUT(&ref_test == &lambda::ref(ref_test)());
+
+  greet("john 117");
+  greet("343 guilty spark");
+  greet(80085);
+
+  DOUT(lambdas_test(_1, 4));
+  DOUT(lambdas_test(1, 4));
+  DOUT(lambdas_test(_1, _2));
+  
   int test = 8;
   DOUT(test == identity(test));
   DOUT(&test == &identity(test));
@@ -253,7 +367,7 @@ int main(int argc, char *argv[]) {
   // auto p1 = phoenix_nary<threesum, double, double>(1.1, 1.2);
   // auto p2 = make_lambda(p1);
   // DOUT(p2(_1, _2, _1*_2));
-
+ 
   auto aa = sum3(_1, _2, _1*_2);
   DOUT(aa(1.1, 1.2));
   DOUT(1.1 + 1.2 + 1.1*1.2);
@@ -282,7 +396,7 @@ int main(int argc, char *argv[]) {
   DOUT(t6);
   
 #if 1
-  std::cout << t(t4, t5, t6, and_comp) << std::endl;
+  // std::cout << t(t4, t5, t6, and_comp) << std::endl;
   for (int i = 0; i < 20; i++) {
     std::cout << t(t4(i,i), t5(i,i), t6(i,i), and_comp(i,i)) << std::endl;
     // std::cout << t4 << " = " << t4(i, i) << std::endl;
@@ -299,7 +413,9 @@ int main(int argc, char *argv[]) {
   const lambda::placeholder<1> y;
 
   auto hypot = std::sqrt(x*x + y*y);
+  auto hypot2 = std::hypot(x, y);
   DOUT(hypot(1, 1));
+  DOUT(hypot2(1, 1));
   int alpha = 59;
   DOUT(alpha);
   DOUT(&(alpha));
@@ -316,7 +432,6 @@ int main(int argc, char *argv[]) {
   DOUT((_1 += 9)(alpha));
   DOUT((_1 * _2)(4, 5));
   DOUT(alpha);
-  const auto pi = atan(1)*4;
 
   // auto expr = (_1 * 3) < 2;
   auto expr = _1 * (pi + _1 * (1 + _1));

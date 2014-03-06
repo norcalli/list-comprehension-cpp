@@ -3,6 +3,7 @@
 
 #include <string>
 #include "variadic-utils.h"
+#include "string-utils.h"
 #include "lambda-utils.h"
 #include "tuple-utils.h"
 
@@ -35,18 +36,26 @@ namespace lambda {
 
 namespace templates {
 
+template<class Function, class... Params>
+struct lambda_return_type {
+  template<class... Args>
+  using type = decltype(std::declval<Function>()(eval(std::declval<Params>(), std::declval<Args>()...)...));
+};
+
 template<class Param, class Function>
 struct phoenix_unary {
   phoenix_unary(const Param& p, Function f = Function()) : param(p), fn(f) {}
 
   template<class... Args>
   inline auto operator()(Args&&... args)
+      // -> typename lambda_return_type<Function, Param>::template type<Args...>::type {
       -> decltype(std::declval<Function>()(std::declval<Param>()(std::forward<Args>(args)...))) {
     return fn(param(std::forward<Args>(args)...));
   }
 
   template<class... Args>
   inline auto operator()(Args&&... args) const
+      // -> typename lambda_return_type<Function, Param>::template type<Args...>::type {
       -> decltype(std::declval<Function>()(std::declval<Param>()(std::forward<Args>(args)...))) {
     return fn(param(std::forward<Args>(args)...));
   }
@@ -55,30 +64,25 @@ struct phoenix_unary {
   Function fn;
 };
 
-template<class Function, class... Params>
-struct lambda_return_type {
-  template<class... Args>
-  using type = decltype(std::declval<Function>()(eval(std::declval<Params>(), std::declval<Args>()...)...));
-};
-
 template<class Left, class Right, class Function>
 struct phoenix_binary {
-  phoenix_binary(Left&& l, Right&& r, Function f = Function()) : left(l), right(r), fn(f) {}
+  phoenix_binary(Left&& l, Right&& r, Function f = Function())
+      : left(std::forward<Left>(l)), right(std::forward<Right>(r)), fn(f) {}
 
   template<class... Args>
   inline auto operator()(Args&&... args)
       // -> decltype(std::declval<Function>()(std::declval<Left>()(std::forward<Args>(args)...), std::declval<Right>()(std::forward<Args>(args)...))) {
       -> typename lambda_return_type<Function, Left, Right>::template type<Args...> {
-    return fn(left(std::forward<Args>(args)...), right(std::forward<Args>(args)...));
-    // return fn(eval(left, std::forward<Args>(args)...), eval(right, std::forward<Args>(args)...));
+    // return fn(left(std::forward<Args>(args)...), right(std::forward<Args>(args)...));
+    return fn(eval(left, std::forward<Args>(args)...), eval(right, std::forward<Args>(args)...));
   }
 
   template<class... Args>
   inline auto operator()(Args&&... args) const
       // -> decltype(std::declval<Function>()(std::declval<Left>()(std::forward<Args>(args)...), std::declval<Right>()(std::forward<Args>(args)...))) {
       -> typename lambda_return_type<Function, Left, Right>::template type<Args...> {
-    return fn(left(std::forward<Args>(args)...), right(std::forward<Args>(args)...));
-    // return fn(eval(left, std::forward<Args>(args)...), eval(right, std::forward<Args>(args)...));
+    // return fn(left(std::forward<Args>(args)...), right(std::forward<Args>(args)...));
+    return fn(eval(left, std::forward<Args>(args)...), eval(right, std::forward<Args>(args)...));
   }
 
   Left left;
@@ -141,30 +145,34 @@ struct phoenix_nary {
   phoenix_nary(Params&&... ps) : params(std::forward<Params>(ps)...) {}
 
   // phoenix_nary(Function f, Params&&... ps) : fn(f), phoenix_nary(ps...) {}
-  // phoenix_nary(Params&&... ps, Function f = Function()) : fn(f), params(std::forward_as_tuple(ps...)) {}
+  // phoenix_nary(Params&&... ps, Function f = Function()) : fn(f), params(std::forward<Params>(ps)...) {}
 
   template<int... idx, class... Args>
   inline auto apply(tuple_indices<idx...>, Args&&... args)
-      -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      // -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      -> typename lambda_return_type<Function, Params...>::template type<Args...> {
     return fn(eval(std::get<idx>(params), args...)...);
   }
 
   template<int... idx, class... Args>
   inline auto apply(tuple_indices<idx...>, Args&&... args) const
-      -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      // -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      -> typename lambda_return_type<Function, Params...>::template type<Args...> {
     return fn(eval(std::get<idx>(params), args...)...);
   }
 
   template<class... Args>
   inline auto operator()(Args&&... args)
-      -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      // -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      -> typename lambda_return_type<Function, Params...>::template type<Args...> {
       // -> decltype(apply(indices(), args...)) {
     return apply(indices(), std::forward<Args>(args)...);
   }
 
   template<class... Args>
   inline auto operator()(Args&&... args) const
-      -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      // -> decltype(std::declval<Function>()(eval(std::declval<Params>(), args...)...)) {
+      -> typename lambda_return_type<Function, Params...>::template type<Args...> {
       // -> decltype(apply(indices(), args...)) {
     return apply(indices(), std::forward<Args>(args)...);
   }
@@ -175,12 +183,19 @@ struct phoenix_nary {
 
 }
 
+// #define BINARY_ASSIGNMENT(name, op)                                     \
+//   struct name {                                                         \
+//     template<class T, class U>                                          \
+//     inline auto operator()(T& t, const U& u) const -> decltype(t op u) { return t op u; } \
+//     std::string str(const std::string& l, const std::string& r) const { return l + " " #op " " + r; } \
+//   };
+
 #define BINARY_ASSIGNMENT(name, op)                                     \
   struct name {                                                         \
     template<class T, class U>                                          \
-    inline auto operator()(T& t, const U& u) const -> decltype(t op u) { return t op u; } \
+    inline auto operator()(T&& t, U&& u) const -> decltype(std::forward<T>(t) op std::forward<U>(u)) { return std::forward<T>(t) op std::forward<U>(u); } \
     std::string str(const std::string& l, const std::string& r) const { return l + " " #op " " + r; } \
-  };                                                                    \
+  };
 
 BINARY_ASSIGNMENT(Assign, =);
 // BINARY_ASSIGNMENT(AddAssign, +=);
@@ -229,7 +244,13 @@ BINARY_ASSIGNMENT(Assign, =);
 #define NARY_FUNCTION(name, fn)                                         \
   struct name {                                                         \
     template<class... Args>                                             \
-    inline auto operator()(Args&&... args) const -> decltype(fn(args...)) { return fn(args...); } \
+    inline auto operator()(Args&&... args) const -> decltype(fn(args...)) { \
+      return fn(std::forward<Args>(args)...);                           \
+    }                                                                   \
+    template<class... Strings>                                          \
+    std::string str(Strings... strings) const {                         \
+      return std::string(#fn "(") + join(", ", {strings...}) + ")";     \
+    }                                                                   \
     std::string str() const { return #fn; }                             \
   };
 
@@ -300,7 +321,7 @@ UNARY_OPERATOR_SUFFIX(Postdecrement, --);
 //   return Lambda<name>                         \
 // }                                             \
 
-#define BINARY_MEMBER(name, op)                                         \
+#define BINARY_MEMBER_ALPHA(name, op)                                   \
   template<class T, class = typename std::enable_if<!is_lambda<T>::value>::type> \
   inline Lambda<templates::phoenix_binary_left<const Lambda<Function>&, T, name>> \
       operator op(const T& t) const {                                   \
@@ -314,27 +335,52 @@ UNARY_OPERATOR_SUFFIX(Postdecrement, --);
     return make_lambda(type(*this, r));                                 \
   }                                                                     \
 
+#define BINARY_MEMBER(name, op)                                         \
+  template<class T>                                                     \
+  inline Lambda<templates::phoenix_binary<const Lambda<Function>&, T, name>> \
+      operator op(T&& t) const {                                        \
+    using type = templates::phoenix_binary<const Lambda<Function>&, T, name>; \
+    return make_lambda(type(*this, std::forward<T>(t)));                \
+  }                                                                     \
+  template<class T>                                                     \
+  inline Lambda<templates::phoenix_binary<Lambda<Function>&, T, name>> \
+      operator op(T&& t) {                                        \
+    using type = templates::phoenix_binary<Lambda<Function>&, T, name>; \
+    return make_lambda(type(*this, std::forward<T>(t)));                \
+  }                                                                     \
+
+struct Subscript {
+  template<class T, class U>
+  auto operator()(T&& t, U&& u) -> decltype(t[std::forward<U>(u)]) {
+    return t[std::forward<U>(u)];
+  }
+};
+
 
 template<class Func>
 struct Lambda {
   using Function = typename std::decay<Func>::type;
   // Lambda() = default;
-  // Lambda(Function fn) : f(fn) {}
-  Lambda(Lambda&&) = default;
-  Lambda(const Lambda&) = default;
+  // Lambda(Function&& fn) : f(std::forward<Function>(fn)) {}
+  // Lambda(Lambda&&) = default;
+  // Lambda(const Lambda&) = default;
   // Lambda& operator=(Lambda&&) = default;
   // Lambda& operator=(const Lambda&) = default;
 
+  // template<class... Args>
+  // Lambda(Args&&... args) : f(std::forward<Args>(args)...) {}
+
+  // Lambda(Function&& fn = Function()) : f(std::forward<Function>(fn)) {}
   Lambda(Function fn = Function()) : f(fn) {}
   
   template<class... Args>
   inline auto operator()(Args&&... args) -> decltype(std::declval<Function>()(args...)) {
-    return f(args...);
+    return f(std::forward<Args>(args)...);
   }
 
   template<class... Args>
   inline auto operator()(Args&&... args) const -> decltype(std::declval<Function>()(args...)) {
-    return f(args...);
+    return f(std::forward<Args>(args)...);
   }
 
   // Lambda& operator=(const Lambda& other) {
@@ -344,7 +390,8 @@ struct Lambda {
   // Lambda(const Lambda& other) : f(other.f) {}
 
   BINARY_MEMBER(Assign, =);
-
+  BINARY_MEMBER(Subscript, []);
+ 
   // Function f = Function();
   Function f;
 };
@@ -358,6 +405,7 @@ struct placeholder : public Lambda<Get<n>> {
   // placeholder(const placeholder&) = default;
 
   BINARY_MEMBER(Assign, =);
+  BINARY_MEMBER(Subscript, []);
   // BINARY_MEMBER(AddAssign, +=);
   // BINARY_MEMBER(SubAssign, -=);
   // BINARY_MEMBER(MulAssign, *=);
@@ -375,13 +423,7 @@ inline Lambda<Function> make_lambda(Function fn) {
 
 struct Identity {
   template<class T>
-  inline T& operator()(T& t) { return t; }
-
-  template<class T>
-  inline T&& operator()(T&& t) { return t; }
-
-  template<class T>
-  inline const T& operator()(const T& t) { return t; }
+  inline T&& operator()(T&& t) { return std::forward<T>(t); }
 };
 
 #define WRAPPER(suffix, op)                                     \
@@ -393,7 +435,7 @@ struct Identity {
     template<class... Args>                                     \
     inline const T& operator()(Args&&...) const { return t; }   \
     T op t;                                                     \
-  };                                                            \
+  };
 
 WRAPPER(Reference, &);
 WRAPPER(ConstRef, const &);
@@ -452,17 +494,51 @@ WrapperConstRef<T> wrap(const T& t) {
 
 // TODO: Eventually make Constant inherit from Lambda<wrapper> and initialize it with a value initialized from the constructor.
 
-// TODO: optimize this for references (rvalue and lvalue) so that you don't do the copy in the initialization.
 template<class T>
-struct Constant {
-  Constant(T&& tt) : t(tt) {}
-  Constant(const T& tt) : t(tt) {}
+struct Forwarder {
+  Forwarder(T&& tt) : t(std::forward<T>(tt)) {}
   template<class... Args>
-  inline T& operator()(Args&&...) {
-    return t;
-  }
-  T t;
+  T&& operator()(Args&&... args) { return std::forward<T>(t); }
+
+  template<class... Args>
+  T&& operator()(Args&&... args) const { return std::forward<T>(t); }
+  T&& t;
 };
+
+template<class T>
+struct Constant : public Lambda<Forwarder<T> > {
+  Constant(T&& t) : Lambda<Forwarder<T> >(Forwarder<T>(std::forward<T>(t))) {}
+};
+
+template<class T>
+Constant<T> ref(T&& t) {
+  return Constant<T>(std::forward<T>(t));
+}
+
+// TODO: optimize this for references (rvalue and lvalue) so that you don't do the copy in the initialization.
+// template<class T>
+// struct Constant {
+//   Constant(T&& tt) : t(std::forward<T>(tt)) {}
+//   // Constant(const T& tt) : t(tt) {}
+//   template<class... Args>
+//   inline T&& operator()(Args&&...) {
+//     return std::forward<T>(t);
+//   }
+//   T t;
+// };
+
+struct Binder {
+  template<class Function, class... Args>
+  auto operator()(Function fn, Args&&... args) -> decltype(fn(args...)) {
+    return fn(args...);
+  }
+  template<class... Strings>
+  std::string str(Strings... strings) const {
+    return std::string("lambda::bind(") + join(", ", {strings...}) + ")";
+  }
+};
+
+NARY_LAMBDA(Binder, bind);
 
 const placeholder<0> _1;
 const placeholder<1> _2;
@@ -552,17 +628,28 @@ const placeholder<5> _6;
 // template<class Function, class T>
 
 
-#define BINARY_FUNCTION_TEMPLATE(name, fn, title)                       \
+
+// #define BINARY_FUNCTION_TEMPLATE_ALPHA(name, fn, title)                 \
+//   struct name {                                                         \
+//     template<class T, class U>                                          \
+//     inline auto operator()(const T& t, const U& u) const -> decltype(fn) { return fn; } \
+//     template<class T, class U>                                          \
+//     inline auto operator()(T& t, const U& u) const -> decltype(fn) { return fn; } \
+//     std::string str(const std::string& l, const std::string& r) const { return title; } \
+//   };
+
+#define BINARY_FUNCTION_WRAPPER_TEMPLATE(name, fn, title)                       \
   struct name {                                                         \
     template<class T, class U>                                          \
-    inline auto operator()(const T& t, const U& u) const -> decltype(fn) { return fn; } \
-    template<class T, class U>                                          \
-    inline auto operator()(T& t, const U& u) const -> decltype(fn) { return fn; } \
+    inline auto operator()(T&& t, U&& u) const -> decltype(fn) { return fn; } \
     std::string str(const std::string& l, const std::string& r) const { return title; } \
-  };                                                                    \
+  };
 
-#define BINARY_OPERATOR(name, op) BINARY_FUNCTION_TEMPLATE(name, t op u, l + " " #op " " + r)
-#define BINARY_FUNCTION(name, op) BINARY_FUNCTION_TEMPLATE(name, op(t, u), #op "(" + l + ", " + r + ")")
+// #define BINARY_FUNCTION_WRAPPER_TEMPLATE BINARY_FUNCTION_WRAPPER_TEMPLATE_BETA
+
+#define BINARY_OPERATOR(name, op) BINARY_FUNCTION_WRAPPER_TEMPLATE(name, std::forward<T>(t) op std::forward<U>(u), l + " " #op " " + r)
+#define BINARY_FUNCTION(name, op) BINARY_FUNCTION_WRAPPER_TEMPLATE(name, op(std::forward<T>(t), std::forward<U>(u)), #op "(" + l + ", " + r + ")")
+
 // #define BINARY_OPERATOR(name, op)                                       \
 //   struct name {                                                         \
 //     template<class T, class U>                                          \
@@ -579,7 +666,7 @@ const placeholder<5> _6;
 //     inline auto operator()(T& t, const U& u) const -> decltype(op(t, u)) { return op(t, u); } \
 //   };                                                                    \
 
-#define BINARY_LAMBDA(name, op)                                         \
+#define BINARY_LAMBDA_ALPHA(name, op)                                   \
   template<class Function, class T, class = typename std::enable_if<!lambda::is_lambda<T>::value>::type> \
   inline lambda::Lambda<lambda::templates::phoenix_binary_left<const lambda::Lambda<Function>&, T, name>> \
       op(const lambda::Lambda<Function>& f, const T& t) {               \
@@ -599,7 +686,15 @@ const placeholder<5> _6;
     using type = lambda::templates::phoenix_binary<const lambda::Lambda<Alpha>&, \
                                                    const lambda::Lambda<Beta>&, name>; \
     return lambda::make_lambda(type(l, r));                             \
-    }                                                                   \
+    }
+
+#define BINARY_LAMBDA(name, op)                                         \
+  template<class T, class U, class = typename std::enable_if<lambda::any_lambdas<T, U>::value>::type> \
+  inline lambda::Lambda<lambda::templates::phoenix_binary<T, U, name> > \
+  op(T&& l, U&& r) {                                                    \
+    using type = lambda::templates::phoenix_binary<T, U, name>;         \
+    return lambda::make_lambda(type(std::forward<T>(l), std::forward<U>(r))); \
+  }
 
 #define BINARY_OPERATOR_LAMBDA(name, op)        \
   BINARY_OPERATOR(name, op);                    \
@@ -666,35 +761,10 @@ LAMBDA_GLOBAL_UNARY_OPERATOR(lambda::Dereference, *);
 LAMBDA_GLOBAL_UNARY_OPERATOR_SUFFIX(lambda::Postdecrement, --);
 LAMBDA_GLOBAL_UNARY_OPERATOR_SUFFIX(lambda::Postincrement, ++);
 
-#include <cmath>
+// TODO: Add explicit ternary phoenix structure? Quaternary is probably overkill.
+// TODO: Add complex support.
 
-
-// for f in sqrt cos sin tan atan exp log log10 log2; do echo "UNARY_FUNCTION($f, std::$f);"; done | sed -e "s/\([^ ]\+\)\./\u\1\./g"
-namespace functors {
-UNARY_FUNCTION(Sqrt, std::sqrt);
-UNARY_FUNCTION(Cos, std::cos);
-UNARY_FUNCTION(Sin, std::sin);
-UNARY_FUNCTION(Tan, std::tan);
-UNARY_FUNCTION(Atan, std::atan);
-UNARY_FUNCTION(Exp, std::exp);
-UNARY_FUNCTION(Log, std::log);
-UNARY_FUNCTION(Log10, std::log10);
-UNARY_FUNCTION(Log2, std::log2);
-}
-
-// for f in sqrt cos sin tan atan exp log log10 log2; do echo "LAMBDA_GLOBAL_UNARY_FUNCTION(functors::$f, $f);"; done
-namespace std {
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Sqrt, sqrt);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Cos, cos);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Sin, sin);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Tan, tan);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Atan, atan);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Exp, exp);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Log, log);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Log10, log10);
-LAMBDA_GLOBAL_UNARY_FUNCTION(functors::Log2, log2);
-
-}
+#include "lambda-std-defs.h"
 
 // TODO: Double check support for assignment and modifying operators.
 // TODO: To support assignment, the Args&& passed must be capable of supporting lvalue reference.
